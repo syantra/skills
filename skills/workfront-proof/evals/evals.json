@@ -1,0 +1,29 @@
+{
+  "skill_name": "workfront-proof",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "can you check this proof and tell me what the reviewers want changed? group it by page pls <review-url>",
+      "expected_output": "A per-page list of unresolved comments on the latest version, with author and comment text, sourced from the script output.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "We uploaded a new version of this proof yesterday: <review-url> — which comments from the previous version look addressed and which are still open?",
+      "expected_output": "Comments from version N-1 split into addressed (resolved or replied as fixed) and still open, noting any that recur on version N.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Who has signed off on <review-url> and is anything blocking approval?",
+      "expected_output": "Each reviewer's decision on the latest version plus the unresolved comments that block approval.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "walk me through how this proof is laid out, page by page, so I know what was captured: <review-url>",
+      "expected_output": "Page-by-page description in the SKILL.md format: every capture with device, width@dpr and extent; a sitemap diagram, if any, with its page IDs and highlighted nodes; state captures (a tab, accordion or menu open) told apart by their changedFrom box; a menu-only capture as viewport; routes where found in the code; groups and same-page links; a Sticky line; comments per page.",
+      "files": []
+    }
+  ]
+}
