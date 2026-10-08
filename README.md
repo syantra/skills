@@ -18,16 +18,10 @@ npx skills add syantra/skills --skill workfront-proof -g -a claude-code
 
 ## Develop
 
-Tests are standalone scripts that run offline against a fake API:
+A skill's tests live in `skills/<name>/tests/` as standalone scripts that run offline against a fake API; the root `tests/` holds checks on the repo as a whole. Run every test, then validate every skill's format:
 
 ```bash
-for f in tests/test_*.py; do uv run "$f"; done
-```
-
-Validate a skill's format with the reference tool:
-
-```bash
-uvx --from 'git+https://github.com/agentskills/agentskills#subdirectory=skills-ref' skills-ref validate skills/workfront-proof
+./test.sh
 ```
 
 Evals in `skills/<name>/evals/evals.json` use `<review-url>` placeholders. Keep a filled copy beside it as `evals.local.json`, which git ignores. `tests/test_private.py` fails if a real proof link, tenant id or proof token lands anywhere in the repo.

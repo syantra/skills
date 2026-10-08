@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pypdfium2 as pdfium
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "workfront-proof" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from wfproof import images
 
 # A rectangle: points are relative to the page centre, scaled by PHQSCALE (4), y pointing down.

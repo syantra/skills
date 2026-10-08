@@ -8,7 +8,7 @@ Run: uv run tests/test_api.py
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "workfront-proof" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from wfproof import api, text
 
 URL = ("https://example.my.workfront.adobe.com/proof/review/0123456789abcdef0123456789abcdef-PROOFTOKEN0000000000000000000000-t0000000"
