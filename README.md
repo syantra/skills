@@ -5,7 +5,7 @@ Agent skills in the [Agent Skills](https://agentskills.io) format: one folder pe
 ## Install
 
 ```bash
-npx skills add syantra/skills --skill workfront-proof -g -a claude-code
+npx skills add syantra/skills --skill workfront-proof -g -a claude-code   # or --skill snapseq
 ```
 
 `-g` installs for the user rather than the current project; drop `-a` to be asked which agents. Later, `npx skills check` reports a newer version and `npx skills update` applies it.
@@ -14,6 +14,7 @@ npx skills add syantra/skills --skill workfront-proof -g -a claude-code
 
 | Skill | What it does |
 | --- | --- |
+| [snapseq](skills/snapseq/SKILL.md) | Sets up and runs a snapseq screenshot capture set: assesses the directory (a repo, a monorepo app, or nothing), scaffolds the config, writes the spec and the capture from a proof, a PDF or a route list, runs it and checks the shots. Needs `uv` and Node. |
 | [workfront-proof](skills/workfront-proof/SKILL.md) | Works through an Adobe Workfront proof like a contractor: lists review comments with the marked area as an image, describes the proof page by page, reads versions and sign-off, and replies or resolves on request. Needs `uv`. |
 
 ## Develop

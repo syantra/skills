@@ -1,0 +1,29 @@
+{
+  "skill_name": "snapseq",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "help me make screenshots of these proof pages <review-url> from this website: <site-url>",
+      "expected_output": "Runs assess first and reports the verdict (standalone, since no package serves the site), scaffolds a <site>-screenshots folder with init pointing at the live host and devices matched to the proof's measured width and dpr, reads the proof's pages through the workfront-proof skill when installed, otherwise asks for the exported PDF or images and says how to install that skill, writes <name>.sequence.md with one row per capture page and the non-capture pages under Not shots, writes the capture to follow it, runs it, reads shots.txt, and reports the run directory and any row that differs from the proof. The review link appears nowhere in the project files.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "set up snapseq in this repo so we can reshoot the proof pages",
+      "expected_output": "Runs assess, names the verdict (add-to with the app, or asks one question when choose lists several), runs init --app with the host taken from the app's dev script port and the webServer command from its package manager, confirms the install and the Chromium install ran (or says the command to run under Node 22), and stops before writing a capture until the spec exists.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "screenshot /, /pricing and /docs on staging, desktop and mobile, full page",
+      "expected_output": "Assess reports reuse and the existing captures and helpers are read, a sequence doc lists three full rows with the routes, the capture opens each route after disableTransitions and takes seq.snapPage() once per row, the run uses --env staging, and the report gives the run directory with three shots per device.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "row 5 came out wrong, the menu is closed in the mobile shot. can you fix it and reshoot just that device into the same run?",
+      "expected_output": "Reads shots.txt and the mobile PNG for row 5, finds the cause in the capture (a missing wait for the open menu, or a hover that an instant pointer move closed), fixes the capture rather than renumbering, reruns with SNAPSEQ_RUN set to that run and --device mobile, and confirms the shot now matches the reference.",
+      "files": []
+    }
+  ]
+}
