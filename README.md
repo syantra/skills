@@ -25,6 +25,6 @@ A skill's tests live in `skills/<name>/tests/` as standalone scripts that run of
 ./test.sh
 ```
 
-A release is per skill: raise `metadata.version` in its `SKILL.md`, commit, push, then `gh release create <skill>@<version> --title "<skill> <version>" --notes "<what changed>"`. The skills CLI updates from the folder on `main` regardless; releases are the changelog.
+A release covers the whole repo: `gh release create v<version> --title "v<version>" --notes "<what changed, per skill>"` on `main`. `metadata.version` in a `SKILL.md` is that skill's own version and moves on its own. The skills CLI updates from the folders on `main` regardless; releases are the changelog.
 
 Evals in `skills/<name>/evals/evals.json` use `<review-url>` placeholders. Keep a filled copy beside it as `evals.local.json`, which git ignores. `tests/test_private.py` fails if a real proof link, tenant id or proof token lands anywhere in the repo.
