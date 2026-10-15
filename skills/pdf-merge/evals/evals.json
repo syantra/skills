@@ -1,0 +1,29 @@
+{
+  "skill_name": "pdf-merge",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "merge contract.pdf, signature.jpg and appendix.pdf into one pdf",
+      "expected_output": "Runs pdf_merge.py once with the three files in that order and an output named contract-merged.pdf beside them, then reports the output path and the page total.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "turn all the screenshots in ./shots into a single PDF",
+      "expected_output": "Lists ./shots first, passes the folder so pages follow name order with numbers in order, writes shots-merged.pdf outside the folder, and reports the page total, any files it skipped, and the shrink factor if it printed one.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "compile everything under .screenshots/run-1/ into one pdf, desktop first then mobile",
+      "expected_output": "Lists the tree, sees that each page folder holds desktop.pdf and mobile.pdf beside desktop/ and mobile/ folders of the same PNGs, merges one set instead of both (asking which if the request does not settle it), passes every desktop input before every mobile one in page-folder order, and reports the output path and page total.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "combine scan.pdf and IMG_2041.HEIC into one file",
+      "expected_output": "Says HEIC is not read, converts it to JPEG first (sips on macOS) or asks for a JPEG, then merges scan.pdf and the converted image in that order and reports the result.",
+      "files": []
+    }
+  ]
+}
