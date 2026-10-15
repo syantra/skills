@@ -25,7 +25,8 @@ def pkg(d, **fields):
 
 
 def env_for(home, **extra):  # an empty HOME: no nvm, no browser cache, whatever the machine has
-    return {**os.environ, "HOME": str(home), "USERPROFILE": str(home), "LOCALAPPDATA": str(home), **extra}
+    base = {k: v for k, v in os.environ.items() if k not in ("NVM_DIR", "PLAYWRIGHT_BROWSERS_PATH")}
+    return {**base, "HOME": str(home), "USERPROFILE": str(home), "LOCALAPPDATA": str(home), **extra}
 
 
 def script(*args, env, cwd=None):
@@ -36,7 +37,9 @@ with tempfile.TemporaryDirectory() as t:
     tmp = Path(t).resolve()
     home = tmp / "home"
     home.mkdir()
-    ENV = env_for(home)
+    nobin = tmp / "nobin"  # an empty PATH: no package manager unless a test adds one
+    nobin.mkdir()
+    ENV = env_for(home, PATH=str(nobin))
 
     def assess(d):
         r = script("assess", str(d), env=ENV)
@@ -54,7 +57,7 @@ with tempfile.TemporaryDirectory() as t:
     pkg(mono / "esbuild")  # would show up as an app if the list ran on past `packages:`
     pkg(mono / "apps/shop", name="shop", dependencies={"next": "16.0.0"},
         scripts={"dev": "next dev --port ${PORT:-3002}", "screenshot": "snapseq"},
-        devDependencies={"snapseq": "^0.1.0", "@playwright/test": "1.59.1"})
+        devDependencies={"snapseq": "^0.1.0", "@playwright/test": "1.59.1", "snapseq-label": "^0.1.0"})
     w(mono / "apps/shop/snapseq.config.ts", "export default {};\n")
     w(mono / "apps/shop/captures/root.capture.ts")
     w(mono / "apps/shop/captures/root.sequence.md")
@@ -71,7 +74,7 @@ with tempfile.TemporaryDirectory() as t:
     assert list(by) == ["apps/shop", "apps/web", "packages/ui"], list(by)
     assert by["apps/shop"] == {
         "dir": "apps/shop", "name": "shop", "framework": "next", "dev": "next dev --port ${PORT:-3002}", "port": 3002,
-        "snapseq": "^0.1.0", "playwright": "1.59.1", "config": "snapseq.config.ts",
+        "snapseq": "^0.1.0", "plugins": {"snapseq-label": "^0.1.0"}, "playwright": "1.59.1", "config": "snapseq.config.ts",
         "captures": ["campaign/pricing", "root"], "sequences": ["root"], "screenshotScript": "snapseq"}
     assert (by["apps/web"]["port"], by["apps/web"]["config"], by["apps/web"]["captures"]) == (3000, None, [])
     assert (by["packages/ui"]["framework"], by["packages/ui"]["port"]) == (None, None)
@@ -90,6 +93,12 @@ with tempfile.TemporaryDirectory() as t:
     ported = tmp / "ported"
     pkg(ported, name="ported", dependencies={"next": "16.0.0"}, scripts={"dev": "PORT=4000 next dev"})
     assert assess(ported)["apps"][0]["port"] == 4000
+    # an --inspect address is not the app's port, and Remix on vite serves on 5173.
+    insp = tmp / "insp"
+    pkg(insp, name="insp", dependencies={"next": "16.0.0"}, scripts={"dev": "NODE_OPTIONS=--inspect=127.0.0.1:9229 next dev"})
+    rmx = tmp / "rmx"
+    pkg(rmx, name="rmx", dependencies={"@remix-run/dev": "2.0.0"}, devDependencies={"vite": "6.0.0"}, scripts={"dev": "remix vite:dev"})
+    assert (assess(insp)["apps"][0]["port"], assess(rmx)["apps"][0]["port"]) == (3000, 5173)
     assert (a["apps"][0]["port"], a["apps"][0]["framework"], a["apps"][0]["config"], a["apps"][0]["captures"]) == (3000, "next", None, [])
 
     # 3. nothing to attach to.
@@ -129,6 +138,41 @@ with tempfile.TemporaryDirectory() as t:
     pkg(one / "libs/ui", name="ui")
     a = assess(one)
     assert (a["packageManager"], a["verdict"], a["app"], "choose" in a) == ("bun", "add-to", "apps/site", False)
+    # pnpm-workspace.yaml: a comment after a glob or after `packages:`, and a flow list, still count.
+    for name, yaml in (("wcomment", 'packages:  # apps\n  - apps/web   # the site\n  - "libs/*"  # shared\n'),
+                       ("wflow", "packages: ['apps/*', \"libs/*\"]  # inline\n")):
+        wd = tmp / name
+        (wd / ".git").mkdir(parents=True)
+        w(wd / "pnpm-workspace.yaml", yaml)
+        pkg(wd / "apps/web", name="web", dependencies={"next": "16.0.0"})
+        pkg(wd / "libs/ui", name="ui")
+        assert [x["dir"] for x in assess(wd)["apps"]] == ["apps/web", "libs/ui"], name
+    # a `packages:` list it cannot read is no reason to pick an app: the user chooses.
+    wodd = tmp / "wodd"
+    (wodd / ".git").mkdir(parents=True)
+    w(wodd / "pnpm-workspace.yaml", 'packages: [\n  "apps/*",\n]\n')
+    pkg(wodd, name="root")
+    pkg(wodd / "apps/web", name="web", dependencies={"next": "16.0.0"})
+    a = assess(wodd)
+    assert (a["workspace"], a["app"], a["appPath"], a["choose"]) == (True, None, None, ["."])
+    # a glob that expands to nothing is as unreadable as no glob.
+    wbrace = tmp / "wbrace"
+    (wbrace / ".git").mkdir(parents=True)
+    w(wbrace / "pnpm-workspace.yaml", 'packages: ["{apps,libs}/*"]\n')
+    pkg(wbrace, name="root")
+    pkg(wbrace / "apps/web", name="web", dependencies={"next": "16.0.0"})
+    a = assess(wbrace)
+    assert (a["app"], a["choose"]) == (None, ["."])
+    # capturesDir comes from the config, and every extension snapseq matches counts.
+    cd = tmp / "cd"
+    pkg(cd, name="cd", scripts={"screenshot": "snapseq"})
+    w(cd / "snapseq.config.ts", 'export default defineConfig({\n  // capturesDir: "old",\n'
+      '  envs: { prod: { host: "https://x.test" } }, capturesDir: "shots",\n});\n')  # a commented one is ignored, a URL is not a comment
+    for f in ("shots/a.capture.mjs", "shots/sub/b.capture.cts", "shots/c.capture.ts", "shots/x.sequence.md", "shots/helper.ts",
+              "captures/old.capture.ts"):
+        w(cd / f)
+    r = assess(cd)["apps"][0]
+    assert (r["captures"], r["sequences"]) == (["a", "c", "sub/b"], ["x"]), r
 
     # 5. init in an app.
     before = {p.name for p in site.iterdir()}
@@ -136,23 +180,27 @@ with tempfile.TemporaryDirectory() as t:
     assert r.returncode == 0, r.stderr
     cfg = (site / "snapseq.config.ts").read_text()
     assert cfg == """import { defineConfig } from "snapseq";
+import { label } from "snapseq-label";
+import { pdf } from "snapseq-pdf";
 
 // yarn screenshot [filter] [--device <name>] [--headed|--ui]
 // Starts `yarn dev` on http://localhost:3000 unless a server already answers
 // there, in which case that one is used. Output lands in ./.screenshots/<run>/,
-// which ignores itself.
+// which ignores itself. A shot that passes `label` gets a strip above it, and
+// each device folder gets a PDF beside it.
 
 export default defineConfig({
   envs: {
     dev: { host: "http://localhost:3000", webServer: "yarn dev" },
   },
+  plugins: [label(), pdf()],
 });
 """, cfg
     assert all(len(line) <= 80 for line in cfg.splitlines())
     assert (site / "captures").is_dir()
     p = json.loads((site / "package.json").read_text())
     assert p["scripts"] == {"dev": "next dev", "screenshot": "snapseq"}
-    assert p["devDependencies"] == {"@playwright/test": "^1.59.1", "snapseq": "^0.2.0"}
+    assert p["devDependencies"] == {"@playwright/test": "^1.59.1", "snapseq": "^0.3.0", "snapseq-label": "^0.1.0", "snapseq-pdf": "^0.1.0"}
     assert p["dependencies"] == {"next": "16.0.0"}
     assert str(site / "snapseq.config.ts") in r.stdout and "run:" not in r.stdout
     pkg_text = (site / "package.json").read_text()
@@ -160,14 +208,23 @@ export default defineConfig({
     assert again.returncode == 1 and "already exists" in again.stderr
     assert (site / "snapseq.config.ts").read_text() == cfg and (site / "package.json").read_text() == pkg_text
     assert {p.name for p in site.iterdir()} == before | {"snapseq.config.ts", "captures"}
-    # an app that has the packages and a screenshot script already keeps them.
+    # an app with a screenshot script keeps it; packages below what the config needs are raised where they sit.
     kept = tmp / "kept"
     pkg(kept, name="kept", scripts={"screenshot": "snapseq --headed"}, dependencies={"snapseq": "^0.1.0"},
         devDependencies={"@playwright/test": "1.50.0"})
-    assert script("init", "--app", str(kept), "--host", "http://localhost:4000", "--no-install", env=ENV).returncode == 0
+    r = script("init", "--app", str(kept), "--host", "http://localhost:4000", "--no-install", env=ENV)
+    assert r.returncode == 0, r.stderr
     p = json.loads((kept / "package.json").read_text())
     assert (p["scripts"], p["dependencies"], p["devDependencies"]) == (
-        {"screenshot": "snapseq --headed"}, {"snapseq": "^0.1.0"}, {"@playwright/test": "1.50.0"})
+        {"screenshot": "snapseq --headed"}, {"snapseq": "^0.3.0"},
+        {"@playwright/test": "^1.59.1", "snapseq-label": "^0.1.0", "snapseq-pdf": "^0.1.0"})
+    assert "raise: snapseq ^0.1.0 -> ^0.3.0" in r.stdout
+    # at or above that, they stay.
+    newer = tmp / "newer"
+    pkg(newer, name="newer", dependencies={"snapseq": "^0.4.0"}, devDependencies={"@playwright/test": "1.60.2"})
+    assert script("init", "--app", str(newer), "--host", "http://localhost:4000", "--no-install", env=ENV).returncode == 0
+    p = json.loads((newer / "package.json").read_text())
+    assert (p["dependencies"], p["devDependencies"]["@playwright/test"]) == ({"snapseq": "^0.4.0"}, "1.60.2")
     assert 'dev: { host: "http://localhost:4000" }' in (kept / "snapseq.config.ts").read_text()  # no dev script, no webServer
     # a screenshot script that runs another tool is a conflict, reported before anything is written.
     taken = tmp / "taken"
@@ -182,14 +239,17 @@ export default defineConfig({
     assert r.returncode == 0, r.stderr
     assert json.loads((shots / "package.json").read_text()) == {
         "name": "site-shots", "private": True, "type": "module", "scripts": {"screenshot": "snapseq"},
-        "devDependencies": {"@playwright/test": "^1.59.1", "snapseq": "^0.2.0"}}
+        "devDependencies": {"@playwright/test": "^1.59.1", "snapseq": "^0.3.0", "snapseq-label": "^0.1.0", "snapseq-pdf": "^0.1.0"}}
     assert (shots / ".gitignore").read_text() == "node_modules/\n"
     cfg = (shots / "snapseq.config.ts").read_text()
     assert cfg == """import { defineConfig } from "snapseq";
+import { label } from "snapseq-label";
+import { pdf } from "snapseq-pdf";
 
 // pnpm screenshot [filter] [--device <name>] [--headed|--ui]
 // Shoots https://www.example.com; there is no dev server here. Output lands in
-// ./.screenshots/<run>/, which ignores itself.
+// ./.screenshots/<run>/, which ignores itself. A shot that passes `label` gets
+// a strip above it, and each device folder gets a PDF beside it.
 
 export default defineConfig({
   envs: {
@@ -199,14 +259,22 @@ export default defineConfig({
     desktop: { viewport: { width: 1728, height: 890 }, deviceScaleFactor: 2 },
     mobile: { viewport: { width: 430, height: 803 }, deviceScaleFactor: 2, hasTouch: true },
   },
+  plugins: [label(), pdf()],
 });
 """, cfg
     assert (shots / "captures").is_dir()
     assert script("init", "--standalone", str(shots), "--host", "https://x.test", "--no-install", env=ENV).returncode == 1  # not empty
     assert script("init", "--standalone", str(tmp / "nohost"), "--no-install", env=ENV).returncode == 1
     assert not (tmp / "nohost").exists()
-    assert script("init", "--standalone", str(tmp / "baddev"), "--host", "https://x.test", "--device", "tv=wide", "--no-install", env=ENV).returncode == 1
-    assert not (tmp / "baddev").exists()
+    for bad in ("tv=wide", "tv=0x844", "tv=390x0", "tv=390x844@0", "..=390x844", ".=390x844", "a/b=390x844", "=390x844"):
+        r = script("init", "--standalone", str(tmp / "baddev"), "--host", "https://x.test", "--device", bad, "--no-install", env=ENV)
+        assert r.returncode == 1 and not (tmp / "baddev").exists(), bad
+    # leading zeros are plain numbers in the config.
+    norm = tmp / "norm"
+    r = script("init", "--standalone", str(norm), "--host", "https://x.test", "--device", "m-1=0390x0844@02.50+touch", "--device", "4k=3840x2160", "--no-install", env=ENV)
+    assert r.returncode == 0, r.stderr
+    assert '"m-1": { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2.5, hasTouch: true },' in (norm / "snapseq.config.ts").read_text()
+    assert '"4k": { viewport: { width: 3840, height: 2160 } },' in (norm / "snapseq.config.ts").read_text()  # a digit first is fine
 
     # 7. init needs a package.json, and a host it can find.
     nopkg = tmp / "nopkg"
@@ -218,7 +286,33 @@ export default defineConfig({
     r = script("init", "--app", str(noport), "--no-install", env=ENV)
     assert r.returncode == 1 and "--host" in r.stderr and not (noport / "snapseq.config.ts").exists()
 
-    # 8. Node 26 hangs `playwright install`: run it under the newest Node 22, or skip it with a warning.
+    # 8. A package manager that is not installed is found out before anything is written; with none given, the first installed one is used.
+    nvm_dir = tmp / "customnvm"
+    (nvm_dir / "versions/node/v22.5.0/bin").mkdir(parents=True)
+    out = json.loads(script("assess", str(tmp), env=env_for(home, NVM_DIR=str(nvm_dir))).stdout)
+    assert out["node22"] == str(nvm_dir / "versions/node/v22.5.0/bin")  # $NVM_DIR is honoured
+    browsers = tmp / "browsers"
+    (browsers / "chromium-1169").mkdir(parents=True)
+    assert json.loads(script("assess", str(tmp), env=env_for(home, PLAYWRIGHT_BROWSERS_PATH=str(browsers))).stdout)["chromium"] is True
+    if os.name == "posix":
+        def bins(name, *tools):
+            b = tmp / name
+            for t in tools:
+                w(b / t, "#!/bin/sh\n")
+                (b / t).chmod(0o755)
+            return b
+
+        npm_only = env_for(home, PATH=str(bins("npmbin", "npm")))
+        yarn_npm = env_for(home, PATH=str(bins("yarnbin", "yarn", "npm")))
+        for name, env, line in (("pick-npm", npm_only, "// npm run screenshot -- [filter] [--device <name>] [--headed|--ui]"),
+                                ("pick-yarn", yarn_npm, "// yarn screenshot [filter] [--device <name>] [--headed|--ui]")):
+            r = script("init", "--standalone", str(tmp / name), "--host", "https://x.test", "--no-install", env=env)
+            assert r.returncode == 0 and line in (tmp / name / "snapseq.config.ts").read_text(), r.stderr
+        for name, extra, env in (("none", [], ENV), ("wrong-pm", ["--pm", "yarn"], npm_only)):
+            r = script("init", "--standalone", str(tmp / name), "--host", "https://x.test", *extra, env=env)
+            assert r.returncode == 1 and "not found on PATH" in r.stderr and not (tmp / name).exists(), (name, r.stderr)
+
+    # 9. Node 26 hangs `playwright install`: run it under the newest Node 22, or skip it with a warning.
     if os.name == "posix":
         fake = tmp / "fakebin"
         w(fake / "node", "#!/bin/sh\necho v26.1.0\n")

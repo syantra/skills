@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing</title>
+<style>
+  body { margin: 0; font: 16px system-ui }
+  header { position: fixed; top: 0; left: 0; right: 0; height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: #123; color: #fff }
+  header a { color: #fff }
+  main { padding-top: 56px }
+  .tall { height: 2400px; background: linear-gradient(#fff, #cdd) }
+  #tab { position: fixed; top: 50%; right: 0; width: 40px; height: 120px; background: #c30 }
+  #panel { position: fixed; top: 50%; right: 0; width: 334px; height: 200px; background: #fff; border: 1px solid #333 }
+  #menu { position: absolute; top: 56px; left: 0; right: 0; padding: 16px; background: #fff; border-bottom: 1px solid #333 }
+  @media (min-width: 700px) { #menu-button { display: none } }
+</style>
+<header>
+  <strong>Demo</strong>
+  <a href="/">Home</a> <a href="/pricing/">Pricing</a> <a href="/docs/">Docs</a>
+  <button id="menu-button">Menu</button>
+</header>
+<nav id="menu" hidden><a href="/">Home</a> <a href="/pricing/">Pricing</a> <a href="/docs/">Docs</a></nav>
+<main><h1>Pricing</h1><div class="tall"></div></main>
+<footer><a href="#top">Contact</a></footer>
+<div id="tab"></div>
+<aside id="panel" hidden>Feedback <button id="panel-close">Close</button></aside>
+<script>
+  // The menu fills in 1.5 s after the click; on a phone the feedback panel opens itself 0.1 s after the load event.
+  document.getElementById("menu-button").onclick = () => setTimeout(() => (document.getElementById("menu").hidden = false), 1500);
+  document.getElementById("panel-close").onclick = () => (document.getElementById("panel").hidden = true);
+  if (matchMedia("(max-width: 600px)").matches) addEventListener("load", () => setTimeout(() => (document.getElementById("panel").hidden = false), 100));
+</script>

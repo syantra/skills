@@ -23,7 +23,8 @@ LOCKS = [("pnpm-lock.yaml", "pnpm"), ("yarn.lock", "yarn"), ("package-lock.json"
 FRAMEWORKS = [("next", "next"), ("astro", "astro"), ("nuxt", "nuxt"), ("@remix-run/dev", "remix"), ("@sveltejs/kit", "sveltekit"), ("vite", "vite")]
 DEFAULT_PORT = {"next": 3000, "nuxt": 3000, "remix": 3000, "astro": 4321, "vite": 5173, "sveltekit": 5173}
 PORT_RES = [r"\bPORT=(\d+)", r"--port[ =](\d+)", r"-p (\d+)", r"PORT:-(\d+)", r":(\d{4,5})\b"]
-PLAYWRIGHT, SNAPSEQ = "^1.59.1", "^0.2.0"
+DEPS = {"@playwright/test": "^1.59.1", "snapseq": "^0.3.0", "snapseq-label": "^0.1.0", "snapseq-pdf": "^0.1.0"}
+FLOOR = {"@playwright/test": (1, 59), "snapseq": (0, 3)}  # what the generated config needs (label(), pdf())
 
 
 def fail(msg, code=1):
@@ -63,28 +64,34 @@ def package_manager(d, root):
 
 
 def workspace_globs(d):
-    """Workspace globs declared in d (pnpm-workspace.yaml or package.json), else []."""
-    globs, on = [], False
+    """Workspace globs declared in d (pnpm-workspace.yaml or package.json); [] if `packages:` is there but unreadable, None if no workspace."""
+    globs, on, declared = [], False, False
     y = d / "pnpm-workspace.yaml"
     for line in y.read_text().splitlines() if y.is_file() else []:
-        if line.rstrip() == "packages:":
-            on = True
+        line = re.sub(r"(^|\s)#.*", "", line).rstrip()
+        m = re.match(r"packages:(.*)$", line)
+        if m:
+            on = declared = True
+            flow = m[1].strip()  # `packages: ["a/*", "b/*"]`; a list over several lines is left unread
+            if flow[:1] == "[" and flow[-1:] == "]":
+                globs += [g for g in (x.strip(" '\"") for x in flow[1:-1].split(",")) if g]
         elif on:
-            if line[:1] not in ("", " ", "\t", "-", "#"):  # next top-level key
+            if line[:1] not in ("", " ", "\t", "-"):  # next top-level key
                 break
-            m = re.match(r"^\s*-\s*['\"]?([^'\"#]+?)['\"]?\s*$", line)
+            m = re.match(r"^\s*-\s*['\"]?([^'\"]+?)['\"]?$", line)
             if m:
                 globs.append(m[1])
     if not globs:
         ws = read_json(d / "package.json").get("workspaces")
         ws = ws.get("packages") if isinstance(ws, dict) else ws
         globs = [g for g in ws if isinstance(g, str)] if isinstance(ws, list) else []
-    return globs
+    return globs or ([] if declared else None)
 
 
 def port_of(dev, framework):
+    dev = re.sub(r"--inspect(?:-brk)?(?:=\S*)?", "", dev or "")  # its :9229 is not the app's port
     for r in PORT_RES:
-        m = re.search(r, dev or "")
+        m = re.search(r, dev)
         if m:
             return int(m[1])
     return DEFAULT_PORT.get(framework)
@@ -95,22 +102,27 @@ def app_record(d, base):
     deps = {**p.get("dependencies", {}), **p.get("devDependencies", {})}
     scripts = p.get("scripts", {})
     framework = next((name for dep, name in FRAMEWORKS if dep in deps), None)
-    cap = d / "captures"
+    config = next((c for c in CONFIGS if (d / c).exists()), None)
+    text = re.sub(r"(^|\s)//.*", "", (d / config).read_text(errors="ignore")) if config else ""  # not a // inside a URL
+    m = re.search(r"""capturesDir\s*:\s*["'`]([^"'`]+)["'`]""", text)
+    cap = d / (m[1] if m else "captures")
 
-    def names(suffix):
-        return sorted(f.relative_to(cap).as_posix()[: -len(suffix)] for f in cap.glob(f"**/*{suffix}"))
+    def names(pat):
+        rels = (f.relative_to(cap).as_posix() for f in cap.glob("**/*") if f.is_file())
+        return sorted(re.sub(pat, "", r) for r in rels if re.search(pat, r))
 
     return {
         "dir": Path(os.path.relpath(d, base)).as_posix(),
         "name": p.get("name"),
         "framework": framework,
         "dev": scripts.get("dev"),
-        "port": port_of(scripts.get("dev"), framework),
+        "port": port_of(scripts.get("dev"), "vite" if framework == "remix" and "vite" in deps else framework),
         "snapseq": deps.get("snapseq"),
+        "plugins": {k: v for k, v in deps.items() if k.startswith("snapseq-")},
         "playwright": deps.get("@playwright/test"),
-        "config": next((c for c in CONFIGS if (d / c).exists()), None),
-        "captures": names(".capture.ts"),
-        "sequences": names(".sequence.md"),
+        "config": config,
+        "captures": names(r"\.capture\.[cm]?[jt]s$"),
+        "sequences": names(r"\.sequence\.md$"),
         "screenshotScript": scripts.get("screenshot"),
     }
 
@@ -124,7 +136,7 @@ def node_version():
 
 def node22():
     """bin dir of the newest nvm Node 22, else 20."""
-    nvm = Path.home() / ".nvm/versions/node"
+    nvm = Path(os.environ.get("NVM_DIR") or Path.home() / ".nvm") / "versions/node"
     for major in (22, 20):
         found = list(nvm.glob(f"v{major}.*"))
         if found:
@@ -133,6 +145,9 @@ def node22():
 
 
 def chromium():
+    custom = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if custom and custom != "0":  # "0" means inside node_modules, which assess cannot see
+        return any(Path(custom).glob("chromium-*"))
     home = Path.home()
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA", home / "AppData/Local"))
@@ -164,8 +179,10 @@ def assess(args):
         fail(f"not a directory: {d}")
     root = find_root(d)
     up = chain(d, root)
-    ws = next(((p, g) for p in up if (g := workspace_globs(p))), None)
-    if ws:
+    ws = next(((p, g) for p in up if (g := workspace_globs(p)) is not None), None)
+    nearest = next((p for p in up if (p / "package.json").is_file()), None)
+    dirs = []
+    if ws and ws[1]:
         wroot, globs = ws
 
         def expand(gs):
@@ -173,12 +190,14 @@ def assess(args):
                     if "node_modules" not in p.relative_to(wroot).parts}
 
         dirs = sorted(expand([g for g in globs if not g.startswith("!")]) - expand([g[1:] for g in globs if g.startswith("!")]))
-    else:
-        nearest = next((p for p in up if (p / "package.json").is_file()), None)
+    unread = ws is not None and not dirs  # `packages:` declared, but no package found through it
+    if not dirs:
         dirs = [nearest] if nearest else []
     base = root or (ws[0] if ws else dirs[0] if dirs else d)
     apps = [app_record(p, base) for p in dirs]
     verdict, app, choose = decide(apps, lambda a: base / a["dir"] in up)
+    if unread and nearest == ws[0]:  # do not guess the app
+        app, choose = None, [a["dir"] for a in apps]
     out = {
         "dir": str(d),
         "root": str(root) if root else None,
@@ -203,11 +222,11 @@ def key(name):
 
 def parse_device(spec):
     m = re.fullmatch(r"([^=\s/\\]+)=(\d+)x(\d+)(?:@(\d+(?:\.\d+)?))?(\+touch)?", spec)
-    if not m:
-        fail(f"bad --device {spec!r}; use name=WxH[@DPR][+touch]")
+    if not m or m[1] in (".", "..") or 0 in (int(m[2]), int(m[3]), float(m[4] or 1)):
+        fail(f"bad --device {spec!r}; use name=WxH[@DPR][+touch], a name with no spaces or slashes, sizes above 0")
     name, w, h, dpr, touch = m.groups()
-    opts = f"viewport: {{ width: {w}, height: {h} }}"
-    opts += f", deviceScaleFactor: {dpr}" if dpr else ""
+    opts = f"viewport: {{ width: {int(w)}, height: {int(h)} }}"
+    opts += f", deviceScaleFactor: {float(dpr):g}" if dpr else ""
     opts += ", hasTouch: true" if touch else ""
     return f"{key(name)}: {{ {opts} }}"
 
@@ -217,13 +236,16 @@ def config_text(run, env, host, dev, devices):
         intro = f"Starts `{dev.replace(' ', chr(0))}` on {host} unless a server already answers there, in which case that one is used."
     else:
         intro = f"Shoots {host}; there is no dev server here."
-    note = textwrap.fill(f"{intro} Output lands in ./.screenshots/<run>/, which ignores itself.", width=80,
+    note = textwrap.fill(f"{intro} Output lands in ./.screenshots/<run>/, which ignores itself. A shot that passes "
+                         "`label` gets a strip above it, and each device folder gets a PDF beside it.", width=80,
                          initial_indent="// ", subsequent_indent="// ", break_long_words=False, break_on_hyphens=False)
     web = f", webServer: {json.dumps(dev)}" if dev else ""
     lines = [
         'import { defineConfig } from "snapseq";',
+        'import { label } from "snapseq-label";',
+        'import { pdf } from "snapseq-pdf";',
         "",
-        f"// {run} screenshot [filter] [--device <name>] [--headed|--ui]",
+        f"// {run} screenshot{' --' if run == 'npm run' else ''} [filter] [--device <name>] [--headed|--ui]",  # npm eats flags without --
         note.replace("\0", " "),
         "",
         "export default defineConfig({",
@@ -233,7 +255,7 @@ def config_text(run, env, host, dev, devices):
     ]
     if devices:
         lines += ["  devices: {", *(f"    {d}," for d in devices), "  },"]
-    return "\n".join([*lines, "});", ""])
+    return "\n".join([*lines, "  plugins: [label(), pdf()],", "});", ""])
 
 
 def run_cmd(cmd, cwd, env=None):
@@ -281,7 +303,9 @@ def init(args):
             fail(f'scripts.screenshot is already "{current}"; rename that script, then run init again')
         root = find_root(d)
         rec = app_record(d, root or d)
-    pm = args.pm or (None if standalone else package_manager(d, root)) or "pnpm"
+    pm = args.pm or (None if standalone else package_manager(d, root)) or next((p for p in ("pnpm", "yarn", "npm") if shutil.which(p)), "pnpm")
+    if not args.no_install and not shutil.which(pm):  # before anything is written
+        fail(f"{pm} not found on PATH; install it, or pass --pm with one that is installed")
     run = "npm run" if pm == "npm" else pm
     host = args.host or (f"http://localhost:{rec['port']}" if rec["port"] else None)
     if not host:
@@ -292,7 +316,7 @@ def init(args):
         d.mkdir(parents=True, exist_ok=True)
         write(d / "package.json", dump({
             "name": d.name, "private": True, "type": "module", "scripts": {"screenshot": "snapseq"},
-            "devDependencies": {"@playwright/test": PLAYWRIGHT, "snapseq": SNAPSEQ}}))
+            "devDependencies": dict(DEPS)}))
         write(d / ".gitignore", "node_modules/\n")
     write(d / "snapseq.config.ts", config_text(run, args.env or ("prod" if standalone else "dev"), host, dev, devices))
     if not (d / "captures").is_dir():
@@ -300,10 +324,14 @@ def init(args):
         print(f"mkdir: {d / 'captures'}")
     if not standalone:
         pkg.setdefault("scripts", {}).setdefault("screenshot", "snapseq")
-        have = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
-        for name, ver in (("@playwright/test", PLAYWRIGHT), ("snapseq", SNAPSEQ)):
-            if name not in have:
+        for name, ver in DEPS.items():
+            sect = next((k for k in ("dependencies", "devDependencies") if name in pkg.get(k, {})), None)
+            m = re.search(r"(\d+)\.(\d+)", str(pkg[sect][name])) if sect else None
+            if sect is None:
                 pkg.setdefault("devDependencies", {})[name] = ver
+            elif m and (int(m[1]), int(m[2])) < FLOOR.get(name, (0, 0)):  # the config needs the floor, so raise it
+                print(f"raise: {name} {pkg[sect][name]} -> {ver}")
+                pkg[sect][name] = ver
         write(d / "package.json", dump(pkg))
     if args.no_install:
         return
@@ -336,7 +364,7 @@ def main():
     i.add_argument("--env", help="env name (default: dev for --app, prod for --standalone)")
     i.add_argument("--dev-command", help='webServer command; "" for none (default: "<pm> dev" when the app has a dev script)')
     i.add_argument("--device", action="append", metavar="SPEC", help="name=WxH[@DPR][+touch], repeatable; none keeps snapseq's defaults")
-    i.add_argument("--pm", choices=["pnpm", "yarn", "npm", "bun"], help="package manager (default: detected, else pnpm)")
+    i.add_argument("--pm", choices=["pnpm", "yarn", "npm", "bun"], help="package manager (default: detected, else the first of pnpm, yarn, npm on PATH)")
     i.add_argument("--no-install", action="store_true", help="write files only")
     i.set_defaults(fn=init)
     args = ap.parse_args()

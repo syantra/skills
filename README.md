@@ -15,7 +15,7 @@ npx skills add syantra/skills --skill workfront-proof -g -a claude-code   # or -
 | Skill | What it does |
 | --- | --- |
 | [pdf-merge](skills/pdf-merge/SKILL.md) | Merges PDFs and images (JPEG, PNG, TIFF, WebP) into one PDF in a chosen order: each page keeps its own size, images go in without loss, and it never writes over an input. Needs `uv`. |
-| [snapseq](skills/snapseq/SKILL.md) | Sets up and runs a snapseq screenshot capture set: assesses the directory (a repo, a monorepo app, or nothing), scaffolds the config, writes the spec and the capture from a proof, a PDF or a route list, runs it and checks the shots. Needs `uv` and Node. |
+| [snapseq](skills/snapseq/SKILL.md) | Sets up and runs a snapseq screenshot capture set: assesses the directory (a repo, a monorepo app, or nothing), scaffolds the config, writes the spec and the capture from a proof, a PDF or a route list, runs it with the reference's labels above the shots and a PDF per device, and checks the shots. Needs `uv` and Node. |
 | [workfront-proof](skills/workfront-proof/SKILL.md) | Works through an Adobe Workfront proof like a contractor: lists review comments with the marked area as an image, describes the proof page by page, reads versions and sign-off, and replies or resolves on request. Needs `uv`. |
 
 ## Develop

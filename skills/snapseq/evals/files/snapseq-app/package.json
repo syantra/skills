@@ -1,0 +1,15 @@
+{
+  "name": "demo-site",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "python3 -m http.server 4173 --directory site",
+    "screenshot": "snapseq"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "snapseq": "^0.3.0",
+    "snapseq-label": "^0.1.0",
+    "snapseq-pdf": "^0.1.0"
+  }
+}

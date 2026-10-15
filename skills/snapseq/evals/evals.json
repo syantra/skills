@@ -4,25 +4,78 @@
     {
       "id": 1,
       "prompt": "help me make screenshots of these proof pages <review-url> from this website: <site-url>",
-      "expected_output": "Runs assess first and reports the verdict (standalone, since no package serves the site), scaffolds a <site>-screenshots folder with init pointing at the live host and devices matched to the proof's measured width and dpr, reads the proof's pages through the workfront-proof skill when installed, otherwise asks for the exported PDF or images and says how to install that skill, writes <name>.sequence.md with one row per capture page and the non-capture pages under Not shots, writes the capture to follow it, runs it, reads shots.txt, and reports the run directory and any row that differs from the proof. The review link appears nowhere in the project files.",
+      "expected_output": "Runs assess first and reports the verdict (standalone, since no package serves the site), scaffolds a <site>-screenshots folder with init pointing at the live host and devices matched to the proof's measured width and dpr, reads the proof's pages through the workfront-proof skill when installed, otherwise asks for the exported PDF or images and says how to install that skill, groups the proof's pages into jobs (a desktop run plus its mobile run; a second desktop run is the next job), makes one capture per job named after the job's title rather than the site, never one per page or section, and writes a <job>.sequence.md per job with one row per page or state, a desktop page and its mobile counterpart (the same page in the same state) paired into one row, each row with the proof's label as written, and the non-capture pages under Not shots, sets the label plugin's theme and scale from the proof's Labels line, writes the capture to follow it with each row's label on its shot, runs it, reads shots.txt, merges the run's PDFs back into one in the proof's order (each job's desktop.pdf then its mobile.pdf) with the pdf-merge skill when installed, otherwise names the command to install it, and reports the run directory, the merged PDF (or the PDF per device without pdf-merge) and any row that differs from the proof. The review link appears nowhere in the project files.",
       "files": []
     },
     {
       "id": 2,
-      "prompt": "set up snapseq in this repo so we can reshoot the proof pages",
-      "expected_output": "Runs assess, names the verdict (add-to with the app, or asks one question when choose lists several), runs init --app with the host taken from the app's dev script port and the webServer command from its package manager, confirms the install and the Chromium install ran (or says the command to run under Node 22), and stops before writing a capture until the spec exists.",
-      "files": []
+      "prompt": "set up snapseq in this repo for /pricing and /docs, desktop and mobile. just the setup for now, don't write the capture yet",
+      "expected_output": "Runs assess and says the verdict in one line: add-to, for the fixture app (vite, port 4173, pnpm). Takes the two routes in the prompt as the reference (one full row each, no measurement, so no device sizes) before init runs. Runs init --app on that folder with no --device flag, so snapseq's defaults apply (1920x1080 and 390x844@2) and the generated snapseq.config.ts has no devices block; it has host http://localhost:4173, webServer `pnpm dev` and plugins: [label(), pdf()]. package.json gains the screenshot script and the snapseq, snapseq-label, snapseq-pdf and @playwright/test devDependencies. The install and the Chromium install ran, or the reply gives the command to run under Node 22. Stops after the setup as asked: no *.capture.ts is written, and the next step it names is the sequence doc.",
+      "files": [
+        "evals/files/plain-app/package.json"
+      ]
     },
     {
       "id": 3,
       "prompt": "screenshot /, /pricing and /docs on staging, desktop and mobile, full page",
-      "expected_output": "Assess reports reuse and the existing captures and helpers are read, a sequence doc lists three full rows with the routes, the capture opens each route after disableTransitions and takes seq.snapPage() once per row, the run uses --env staging, and the report gives the run directory with three shots per device.",
-      "files": []
+      "expected_output": "Assess reports reuse and names the fixture folder as the app. After the dependencies and Chromium are installed (the fixture ships without node_modules), it reads snapseq.config.ts, captures/home.capture.ts, captures/helpers/open-page.ts and captures/home.sequence.md, and reuses openPage instead of writing a second helper. No survey is run: a list of routes gives it nothing to hold the survey against. A new <name>.sequence.md lists three full rows with the routes /, /pricing and /docs. The new capture calls disableTransitions, opens each route through openPage and takes seq.snapPage() once per row, not the snap({ fullPage: true }) that home.capture.ts uses. The run command carries --env staging. The report gives the run directory with three shots (01.png to 03.png) per device and the PDF per device.",
+      "files": [
+        "evals/files/snapseq-app/captures/helpers/open-page.ts",
+        "evals/files/snapseq-app/captures/home.capture.ts",
+        "evals/files/snapseq-app/captures/home.sequence.md",
+        "evals/files/snapseq-app/package.json",
+        "evals/files/snapseq-app/site/docs/index.html",
+        "evals/files/snapseq-app/site/index.html",
+        "evals/files/snapseq-app/site/pricing/index.html",
+        "evals/files/snapseq-app/snapseq.config.ts"
+      ]
     },
     {
       "id": 4,
       "prompt": "row 5 came out wrong, the menu is closed in the mobile shot. can you fix it and reshoot just that device into the same run?",
-      "expected_output": "Reads shots.txt and the mobile PNG for row 5, finds the cause in the capture (a missing wait for the open menu, or a hover that an instant pointer move closed), fixes the capture rather than renumbering, reruns with SNAPSEQ_RUN set to that run and --device mobile, and confirms the shot now matches the reference.",
+      "expected_output": "Reads .screenshots/2026-10-13 at 10.15.02 AM/home/mobile/shots.txt, the mobile 05.png (a flat placeholder in the fixture: the header bar and a Menu button, no menu) and row 5 of captures/home.capture.ts. Names the cause: row 5 clicks Menu and takes the shot at once, with no wait for the menu, which fills in 1.5 s after the click; the spec's row 5 says to wait for the menu. Fixes the capture with a wait on the menu element between the click and the shot, not a fixed sleep and not networkidle; the other rows and every row number stay as they are. Reruns with SNAPSEQ_RUN=\"2026-10-13 at 10.15.02 AM\" and --device mobile, so no new run directory appears and the desktop folder is untouched. The new mobile 05.png shows the menu links below the header.",
+      "files": [
+        "evals/files/snapseq-app/.screenshots/2026-10-13 at 10.15.02 AM/home/desktop/shots.txt",
+        "evals/files/snapseq-app/.screenshots/2026-10-13 at 10.15.02 AM/home/mobile/05.png",
+        "evals/files/snapseq-app/.screenshots/2026-10-13 at 10.15.02 AM/home/mobile/shots.txt",
+        "evals/files/snapseq-app/captures/helpers/open-page.ts",
+        "evals/files/snapseq-app/captures/home.capture.ts",
+        "evals/files/snapseq-app/captures/home.sequence.md",
+        "evals/files/snapseq-app/package.json",
+        "evals/files/snapseq-app/site/docs/index.html",
+        "evals/files/snapseq-app/site/index.html",
+        "evals/files/snapseq-app/site/pricing/index.html",
+        "evals/files/snapseq-app/snapseq.config.ts"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "the proof shows the top bar at the top of every page and a small tab on the right edge, about halfway down the first screen, with no panel open. our last run had them out of place on the full-page shots, and the tab's panel open on mobile. fix the capture and reshoot",
+      "expected_output": "Starts the dev server and runs the floating survey on the pages at both config device sizes, 1280x800 and 390x844@2+touch. Reads its lines: the header is fixed and `anchored top 0`; div#tab is fixed at the right edge and its line says `neither edge kept` (top 400 at 800 on desktop, top 422 at 844 on mobile); on mobile only, aside#panel is listed, fixed and 336x202 where the proof shows a 40 px tab (open at load, so its line has no `appeared` phrase); the desktop survey lists no panel. Adds a Floating table to captures/home.sequence.md with one row per element: the header `flow`, the tab `pin`, the panel `closed`. The tab is not left as `flow`: a full-page shot puts a top: 50% tab mid-page, so a capture that only switches the full rows to snapPage fails. In the capture, #tab is pinned with a position: absolute rule in addPersistentStyle at the survey's load top (400px desktop, 422px mobile); on mobile, the panel is closed in captures/helpers/open-page.ts: the helper waits for it to appear (it opens 0.1 s after load, so a close right after goto does nothing), clicks its Close button and waits for it to hide; rows 2 to 4 use seq.snapPage(); row 4 scrolls to the top (scrollTo(0, 0)) after the focus that scrolled the page. Reruns both devices into the same run, \"2026-10-13 at 10.15.02 AM\". Compares each full shot's height with the spec's 2555 CSS px (PNG height minus the label strip, over the pixel ratio) and reports which shots changed.",
+      "files": [
+        "evals/files/snapseq-app/.screenshots/2026-10-13 at 10.15.02 AM/home/desktop/shots.txt",
+        "evals/files/snapseq-app/.screenshots/2026-10-13 at 10.15.02 AM/home/mobile/05.png",
+        "evals/files/snapseq-app/.screenshots/2026-10-13 at 10.15.02 AM/home/mobile/shots.txt",
+        "evals/files/snapseq-app/captures/helpers/open-page.ts",
+        "evals/files/snapseq-app/captures/home.capture.ts",
+        "evals/files/snapseq-app/captures/home.sequence.md",
+        "evals/files/snapseq-app/package.json",
+        "evals/files/snapseq-app/site/docs/index.html",
+        "evals/files/snapseq-app/site/index.html",
+        "evals/files/snapseq-app/site/pricing/index.html",
+        "evals/files/snapseq-app/snapseq.config.ts"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "take a screenshot of localhost:3000/pricing so I can check the header",
+      "expected_output": "The snapseq skill is not used: no assess or init runs, and no snapseq package, snapseq.config.ts, capture file or sequence doc is created. The agent takes the one screenshot directly (a one-off Playwright or browser call), saves one PNG, and gives its path or shows it.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "add a visual test for the pricing page to our Playwright suite: toHaveScreenshot at 1280 wide, 1% pixel diff allowed",
+      "expected_output": "The snapseq skill is not used: no assess or init runs, and no snapseq package, config, capture file or sequence doc is added. The agent writes a test in the repo's own Playwright suite that sets the 1280 viewport and calls expect(page).toHaveScreenshot() with maxDiffPixelRatio 0.01, and says how to create the baseline (--update-snapshots).",
       "files": []
     }
   ]
