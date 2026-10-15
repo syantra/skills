@@ -18,6 +18,7 @@ def label(code, prefix=""):
 
 
 def plain(text):
-    """Comment HTML -> plain text: mention links become @Name, entities like &#039; are decoded."""
+    """Comment HTML -> plain text: mention links become @Name, paragraphs and line breaks become newlines, entities like &#039; are decoded."""
     text = re.sub(r'<a class="userlink"[^>]*>(.*?)</a>', r"@\1", text or "")
-    return html.unescape(re.sub(r"<[^>]+>", "", text))
+    text = re.sub(r"</?(?:p|div|li)\b[^>]*>|<br\s*/?>", "\n", text, flags=re.I)
+    return re.sub(r"\s*\n\s*", "\n", html.unescape(re.sub(r"<[^>]+>", "", text))).strip()

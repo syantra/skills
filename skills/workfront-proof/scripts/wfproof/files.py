@@ -11,7 +11,8 @@ def source_file(token, start, page):
     """Download (once) the original file that holds this page -> (path, 0-based page in file, mime)."""
     for f in start["proof"]["sourceFiles"]:
         if f["pagesFrom"] <= page <= f["pagesTo"]:
-            path = CACHE / token / f["name"]
+            # Keyed by first page: a combined proof can hold two files with one name (desktop/home.png, mobile/home.png).
+            path = CACHE / token / str(f["pagesFrom"]) / Path(f["name"]).name
             if not path.exists():
                 path.parent.mkdir(parents=True, exist_ok=True)
                 tmp = path.with_suffix(".part")

@@ -20,6 +20,7 @@ def run(url, version=None):
     return {
         "proof": start["proof"]["name"],
         "version": start["proof"]["version"],
+        "latestVersion": start["proof"]["versions"],
         "decision": decision(start["proof"].get("decision")),  # overall outcome
         "stages": [
             {

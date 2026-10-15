@@ -1,6 +1,6 @@
 # Workfront proof viewer API notes
 
-Captured from the proof viewer's own network traffic (October 2026). None of this is documented by Adobe, so expect changes. If calls start failing, re-capture with `tools/capture_traffic.py` in this repo.
+Captured from the proof viewer's own network traffic (October 2026). None of this is documented by Adobe, so expect changes.
 
 ## Review URL
 
@@ -22,10 +22,10 @@ https://TENANT.my.workfront.adobe.com/proof/review/<hex>-<proofToken>-<suffix>?t
 | `comments` | `sessionId` | `items[]` comments of this version |
 | `versions` | `sessionId`, `only_processed: false` | `items[]` one per version, each with its own `token` |
 | `recipients` | `sessionId` | stages, each with reviewer `items[]` (`name`, `email`, `roleName`, `decision`, `isMe`) |
+| `list_actions` | `sessionId` | comment action labels |
 
 - Versions: `startup` with a version's own `token` opens that version; its comments, pages and reviewers are separate. `commentsCount` in `versions` can be one lower than what `comments` returns (seen on v4: 6 vs 7, one comment with empty text).
 - Decisions: `proof.decision` is the overall outcome and a stage's `decision` is that stage's outcome (null until an approver decides); each reviewer has their own. Values are codes such as `decisionApprovedWithChanges`, `decisionNotRelevant`, `decisionPending`. "Not relevant" with `decisionAt: 0` means the approver didn't need to decide. Roles: `roleReviewer`, `roleReviewerApprover`. Stages can be added while a proof is live (a `Dev` stage appeared on 2026-10-07).
-| `list_actions` | `sessionId` | comment action labels |
 
 `startup` works without login when `proof.isLoginRequired` is false. A bad session gets HTTP 401.
 
@@ -42,6 +42,8 @@ Write methods, taken from the viewer's own code (`assets.proofhq.com/nativeviewe
 
 Writes need a session tied to a reviewer. Signing in through the viewer (`check_email`, then `sign_in` with email and password) makes the viewer rewrite the fragment to `#proof:<proofingCode>,token:<token>,...`. `startup` with that `proofingCode` returns `recipient` (name, `roleName` such as `roleReviewerApprover`). The code is not kept in browser storage, so `scripts/login.py` reads it from the address bar after sign-in and saves it to `~/.config/workfront-proof/codes.json`. Treat the code as a credential.
 
+A personal review link's last path segment (`<hex>-<proofToken>-<suffix>`) also works as a `proofingCode`: `startup` with it returned the link's recipient (checked on one proof, 2026-10-14). A `proof:` value Workfront refuses ("Invalid proofing code") has been seen too, so writes try the saved code, then the link's value, then anonymous. Reads start anonymous and try the same codes only when Workfront refuses that.
+
 ## Comment fields
 
 `number, page, pages[], text, author, created, isResolved, actionId, actionName, replies[], attachments[], drawings[], pinPoint, pins{page: point}, metadata.pageSizes, permissions (bitmask), captureUrl (null in practice)`.
@@ -51,7 +53,7 @@ Writes need a session tied to a reviewer. Signing in through the viewer (`check_
 - `pages[]`: a comment can cover several pages; `pins` and `metadata.pageSizes` then have one entry per page, and each drawing has its own `page`.
 - `replies[]` are one level deep (no parent id): `number` (shown as `<comment>.<number>`), `type` (1 text reply, 2 action applied: empty `text`, `actionName` set), `author`, `text`, `permissions`.
 
-`drawings[]`: `type` (`RECTANGLE`, `ARROW`), `page` (1-based), `color`, `points[]`, plus viewer-scaled `x, y, width, height`.
+`drawings[]`: `type` (`RECTANGLE`, `HIGHLIGHT` with `alpha` 0.4, `LINE`, `ARROW`), `page` (1-based), `color`, `points[]`, plus viewer-scaled `x, y, width, height`. A `LINE` or `ARROW` has two points, start then end; reviewers draw a `LINE` as a strikethrough or as a slash through one character.
 
 ## Markup coordinates
 

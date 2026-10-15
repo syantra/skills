@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "can you check this proof and tell me what the reviewers want changed? group it by page pls <review-url>",
-      "expected_output": "A per-page list of unresolved comments on the latest version, with author and comment text, sourced from the script output.",
+      "expected_output": "Runs proofhq.py list on the link (no --all) and groups its comments by page. Each entry carries the comment's number, author and text as the script printed them. Every comment the script lists is there, no resolved or invented comment is, and the open count equals the script's open. Says so when version differs from latestVersion. A list written without running the script fails.",
       "files": []
     },
     {
@@ -16,13 +16,31 @@
     {
       "id": 3,
       "prompt": "Who has signed off on <review-url> and is anything blocking approval?",
-      "expected_output": "Each reviewer's decision on the latest version plus the unresolved comments that block approval.",
+      "expected_output": "Runs proofhq.py reviewers (with --version <latestVersion> when the link opens an older version) and reports the overall decision and each reviewer's decision per stage. Names a stage as blocking only when it has a Reviewer approver with no decision or Pending; a stage of reviewers only, and an approver marked Not relevant with no decidedAt, is not called a blocker. Open comments on the latest version, from list, are reported separately as open, not as blockers. Says which parts it inferred.",
       "files": []
     },
     {
       "id": 4,
       "prompt": "walk me through how this proof is laid out, page by page, so I know what was captured: <review-url>",
-      "expected_output": "Page-by-page description in the SKILL.md format: every capture with device, width@dpr and extent; a sitemap diagram, if any, with its page IDs and highlighted nodes; state captures (a tab, accordion or menu open) told apart by their changedFrom box; a menu-only capture as viewport; routes where found in the code; groups and same-page links; a Sticky line; comments per page.",
+      "expected_output": "Runs proofhq.py pages and describes every page in the references/describe.md format: a Proof header, then one line per page, `p<N> <device> <width>@<dpr>x <extent> · <route or -> · <state> · <label or ->  <page name>: <sections top to bottom>.  comments <numbers or ->`; a diagram or document page has `diagram` or `document` in place of device, width, dpr and extent. State captures (a tab, accordion or menu open) are told apart from new pages by their changedFrom box, a menu-only capture is viewport, and the route comes from the code or is `-`. Ends with the Groups, Same page across captures, Sticky and Labels lines; Labels gives the strip by colour names, never a hex value, or `none`.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "work through comment 1 on <review-url> and tell me exactly which words to delete, don't edit anything yet",
+      "expected_output": "Runs show on comment 1 and opens its crop. A LINE markup is read as a strikethrough: the words to delete are exactly those the red line crosses in the crop, no more; where they repeat the copy beside them the sentence stays once. If the comment text cites a comment on another version (V<n> c<m>), that comment is read with show <m> --version <n>; otherwise no other version is read. No edit is made, and reply, resolve and --send are not run.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "reply 'fixed' to comment 2 and resolve it <review-url>",
+      "expected_output": "Runs reply \"<review-url>\" 2 \"fixed\" and resolve \"<review-url>\" 2 without --send, and treats the instruction as the request, not the approval. Shows the user both previews with the comment text, the exact action and `as`, asks whether to send them, and stops there: no command with --send runs before the user answers. If `as` is null or not the user, it runs login.py and previews again instead of sending; if `allowed` is false for the resolve, it says so, skips the approval question for that action and offers the reply alone. The link's fragment and any reviewer code are not printed.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "which review comments are still open on PR #12?",
+      "expected_output": "The workfront-proof skill is not used: no proofhq.py or login.py command runs. The agent answers from the pull request itself (for example gh pr view 12 --comments or the review-threads API) and lists the unresolved threads, or says it needs the repository if none is checked out.",
       "files": []
     }
   ]
